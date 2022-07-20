@@ -1,18 +1,31 @@
-import { useState } from 'react'
+import { useState ,useEffect } from 'react'
 import PersonForm from './components/PersonForm'
 import Filter from './components/Filter'
 import Person from './components/Person'
+import NumberServices from "./services/number"
+import Notification from './components/Notification'
+
 const App = () => {
-  const [persons, setPersons] = useState([
-    { name: 'Arto Hellas', number: '040-123456', id: 1 },
-    { name: 'Ada Lovelace', number: '39-44-5323523', id: 2 },
-    { name: 'Dan Abramov', number: '12-43-234345', id: 3 },
-    { name: 'Mary Poppendieck', number: '39-23-6423122', id: 4 }
-  ]) 
+  const [persons, setPersons] = useState([]) 
   const [newName, setNewName] = useState('')
   const [newNumber , setNewNumber] = useState('')
   const [ResultToShow , setNewShow]= useState([{name:"" , number:"" , id: 0}])
-  
+  const [errorMessage , setErrorMessage] = useState({message:"" , status:""})
+  useEffect(() => {
+    NumberServices.getNumber()
+                  .then(numbers => {
+                    setPersons(numbers)
+                  })
+                  .catch(err => {
+                    const message = {
+                      message:"Can't load resource from database , Connection to server lost",
+                      status:"fail"
+                    }
+                    setErrorMessage(message)
+                    setTimeout(() => {setErrorMessage(null)}, 7000)
+                  })
+  },[])
+
   function handleNameChange(event){
     setNewName(event.target.value)
   }
@@ -36,8 +49,43 @@ const App = () => {
     }
     return
   }
+
+  function handleDelete(id){
+    //store the obj in deletobj
+    const deleteobj = persons.filter(person => person.id === id)
+    if(deleteobj === undefined) {
+      const message = {
+        message:"Can't Delete Person , maybe record already deleted ? Try reload",
+        status:"fail"
+    }
+      setErrorMessage(message)
+      setTimeout(() => {setErrorMessage(null)}, 7000)
+    }
+    //Promt a message to user and if user decide to delete , delete the entry 
+    if (window.confirm(`Delete ${deleteobj[0].name} ??`)) {
+      NumberServices.deleteNumber(id).then(response => console.log(response)).catch(err => {
+        const message = {
+          message:"Can't Delete Person , maybe record already deleted ? Try reload",
+          status:"fail"
+        }
+        setErrorMessage(message)
+        setTimeout(() => {setErrorMessage(null)}, 7000)
+      })
+      const message = {
+        message:`${deleteobj[0].name} deleted`,
+        status:"success"
+      }
+      setErrorMessage(message)
+      setTimeout(() => {setErrorMessage(null)}, 5000)
+      const result = persons.filter(person => person.id !== id)
+      setPersons(result)
+    }
+    return
+  }
+
   //add new person to the person
   function addNewPerson(event){
+    let duplicatePerson
     //prevent reloading
     event.preventDefault()
     //if duplicate then we dont add the person to the phonebook
@@ -45,25 +93,75 @@ const App = () => {
     //check if person already exist
     persons.forEach(person => {
       if(person.name === newName){
-        alert(`${newName} already added to this phonebook`)
+        duplicatePerson = person
         isDuplicate = true
         return
       }
     })
-    //if duplicate then exit the function
-    if(isDuplicate) return
-    const person = {
-      name: newName,
-      number: newNumber,
-      id: persons.length+1
+    //if duplifcate then ask user if they want to replace it, yes = replace , no = end handler
+    if(isDuplicate) {
+      if (window.confirm(`${duplicatePerson.name} is already exist , replace the old number with the new one?`)){
+        const newObj = {
+          ...duplicatePerson,
+          number: newNumber
+        }
+        NumberServices.updateNumber(duplicatePerson.id ,newObj).catch(err => {
+          const message = {
+            message:"Can't Update Person",
+            status:"fail"
+          }
+          setErrorMessage(message)
+          setTimeout(() => {setErrorMessage(null)}, 7000)
+        })
+        setPersons(persons.map(person => person.id !== duplicatePerson.id ? person : newObj))
+        const message = {
+          message:`${duplicatePerson.name} info updated`,
+          status:"success"
+        }
+        setErrorMessage(message)
+        setTimeout(() => {setErrorMessage(null)}, 5000)
+      }
+      return
     }
-    //avoid mutate state directly
-    setPersons(persons.concat(person))
+    else{
+      //my id generation is using random numner beacuse if The id is based on length + 1 when user delete a second last element , user can't add another person again
+      const person = {
+        name: newName,
+        number: newNumber,
+        id: persons.length+1
+      }
+
+      // prevent same id added twice in db after user delete some record
+      persons.forEach(element => {
+        if(element.id === person.id)
+        person.id += 1
+      })
+      //avoid mutate state directly
+      setPersons(persons.concat(person))
+      NumberServices.saveNumber(person).then(response => console.log(response)).catch(err => {
+        const message = {
+          message:`Internal error`,
+          status:"fail"
+        }
+        setErrorMessage(message)
+        setTimeout(() => {setErrorMessage(null)}, 5000)
+        return
+      })
+      const message = {
+        message:`${person.name} added`,
+        status:"success"
+      }
+      setErrorMessage(message)
+      setTimeout(() => {setErrorMessage(null)}, 5000)
+      return
+    }
+    
   }
 
   return (
     <div>
       <h2>Phonebook</h2>
+      <Notification message={errorMessage} />
       <p>Type to search</p>
       <Filter results={ResultToShow}/>
       <input onChange={handleFilter}></input>
@@ -78,7 +176,7 @@ const App = () => {
         </div>
       </form>
       <h2>Numbers</h2>
-      <div>{persons.map(person => <Person key={person.name} person={person}/>)}</div>
+      <div>{persons.map(person => <Person key={person.name} person={person} func={() => handleDelete(person.id)}/>)}</div>
     </div>
   )
 }
