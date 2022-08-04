@@ -1,4 +1,5 @@
 import { useState ,useEffect } from 'react'
+import React from 'react'
 import PersonForm from './components/PersonForm'
 import Filter from './components/Filter'
 import Person from './components/Person'
@@ -84,7 +85,7 @@ const App = () => {
   }
 
   //add new person to the person
-  function addNewPerson(event){
+  async function addNewPerson(event){
     let duplicatePerson
     //prevent reloading
     event.preventDefault()
@@ -105,14 +106,18 @@ const App = () => {
           ...duplicatePerson,
           number: newNumber
         }
-        NumberServices.updateNumber(duplicatePerson.id ,newObj).catch(err => {
+        let end = false
+        await NumberServices.updateNumber(duplicatePerson.id ,newObj).catch(err => {
+          
           const message = {
             message:"Can't Update Person",
             status:"fail"
           }
           setErrorMessage(message)
           setTimeout(() => {setErrorMessage(null)}, 7000)
+          end = true
         })
+        if(end) return
         setPersons(persons.map(person => person.id !== duplicatePerson.id ? person : newObj))
         const message = {
           message:`${duplicatePerson.name} info updated`,
@@ -137,22 +142,25 @@ const App = () => {
         person.id += 1
       })
       //avoid mutate state directly
-      setPersons(persons.concat(person))
-      NumberServices.saveNumber(person).then(response => console.log(response)).catch(err => {
+      let end = false;
+      await NumberServices.saveNumber(person).catch((error) => {
+        console.log(error)
         const message = {
-          message:`Internal error`,
+          message:"Validation error/internal server error see console",
           status:"fail"
         }
         setErrorMessage(message)
         setTimeout(() => {setErrorMessage(null)}, 5000)
-        return
+        end = true;
       })
+      if(end) return
       const message = {
         message:`${person.name} added`,
         status:"success"
       }
       setErrorMessage(message)
       setTimeout(() => {setErrorMessage(null)}, 5000)
+      setPersons(persons.concat(person))
       return
     }
     
